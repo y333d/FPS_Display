@@ -1,0 +1,101 @@
+import sys
+import time
+import threading
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QGraphicsDropShadowEffect
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QScreen, QGuiApplication, QColor, QMouseEvent
+from pynput import keyboard
+
+class FPSOverlay(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("FPS Overlay")
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)  
+        self.setAttribute(Qt.WA_TranslucentBackground, True)  
+
+        self.mouse_press_pos = None
+        self.mouse_is_pressed = False
+
+        screen = QGuiApplication.primaryScreen()
+        screen_geometry = screen.geometry()
+        screen_width = screen_geometry.width()
+
+        self.fps_label = QLabel(self)
+        self.fps_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.fps_label.setGeometry(70, 700, 440, 100)  # resize the position and width for yo liking nigga 
+        self.fps_label.setStyleSheet("font-size: 22px;")  # font size
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(5)
+        shadow.setColor(QColor(0, 0, 0, 160))
+        self.fps_label.setGraphicsEffect(shadow)
+
+        self.frames = 0
+        self.start_time = time.time()
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_fps)
+        self.timer.start(100)  # fps updater 100 = millie seconds 1000 = seconds
+
+        self.hue = 0
+
+        self.shift_pressed = False
+
+    def update_fps(self):
+        elapsed_time = time.time() - self.start_time
+        fps = min(int(self.frames / elapsed_time), 9999)  # Limit FPS 
+
+        color = QColor.fromHsl(self.hue, 255, 128)  
+        self.fps_label.setText(f"<font color='{color.name()}'>FPS: {fps}</font>")
+
+        self.hue = (self.hue + 1) % 360
+
+        self.frames = 0
+        self.start_time = time.time()
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.mouse_press_pos = event.globalPos()
+            self.mouse_is_pressed = True
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.mouse_is_pressed:
+            delta = event.globalPos() - self.mouse_press_pos
+            self.move(self.pos() + delta)
+            self.mouse_press_pos = event.globalPos()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.mouse_is_pressed = False
+
+    def on_shift_key_pressed(self):
+        self.shift_pressed = True
+
+    def on_shift_key_released(self):
+        self.shift_pressed = False
+
+def count_frames(overlay):
+    while True:
+        overlay.frames += 1
+        time.sleep(0.01)  
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    overlay = FPSOverlay()
+    overlay.showFullScreen()  
+
+    frame_count_thread = threading.Thread(target=count_frames, args=(overlay,))
+    frame_count_thread.daemon = True
+    frame_count_thread.start()
+
+    def on_key_release(key):
+        if key == keyboard.Key.shift:
+            overlay.on_shift_key_released()
+
+    def on_key_press(key):
+        if key == keyboard.Key.shift:
+            overlay.on_shift_key_pressed()
+
+    with keyboard.Listener(on_press=on_key_press, on_release=on_key_release) as listener:
+        sys.exit(app.exec_())
